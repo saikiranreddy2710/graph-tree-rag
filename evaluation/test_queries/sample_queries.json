@@ -1,0 +1,47 @@
+[
+  {
+    "query": "What is retrieval-augmented generation and how does it work?",
+    "gold_answer": "Retrieval-Augmented Generation (RAG) is a technique that combines large language models with external knowledge retrieval. When a query is received, relevant documents are retrieved from a knowledge base using vector similarity search, and these documents are provided as context to the LLM to generate a more accurate, grounded response.",
+    "gold_source_ids": [],
+    "gold_entities": ["RAG", "LLM", "vector search"],
+    "difficulty": "easy",
+    "category": "factoid",
+    "tags": ["basics", "definition"]
+  },
+  {
+    "query": "Compare GraphRAG and RAPTOR approaches for document retrieval. What are the advantages of each?",
+    "gold_answer": "GraphRAG uses entity knowledge graphs with community detection to enable both local and global queries. RAPTOR uses recursive abstractive summarization to build a tree hierarchy. GraphRAG excels at relationship-heavy queries and global summarization, while RAPTOR is better for multi-level abstraction and thematic understanding.",
+    "gold_source_ids": [],
+    "gold_entities": ["GraphRAG", "RAPTOR", "knowledge graph", "community detection", "summarization tree"],
+    "difficulty": "hard",
+    "category": "comparison",
+    "tags": ["advanced", "comparison"]
+  },
+  {
+    "query": "Why does standard vector search sometimes retrieve similar but wrong documents?",
+    "gold_answer": "Standard vector search relies on embedding similarity, which captures semantic proximity but not factual relevance. Documents about similar topics but different specific entities can have nearly identical embeddings. This 'similar-but-wrong' problem occurs because dense embeddings compress meaning into fixed-size vectors, losing fine-grained distinctions.",
+    "gold_source_ids": [],
+    "gold_entities": ["vector search", "embeddings", "semantic similarity"],
+    "difficulty": "medium",
+    "category": "causal",
+    "tags": ["retrieval", "failure-modes"]
+  },
+  {
+    "query": "What were the main developments in RAG research from 2023 to 2025, and how did they build on each other?",
+    "gold_answer": "RAG evolved from basic retrieve-and-generate (2023) through Self-RAG and CRAG adding self-correction (early 2024), RAPTOR and GraphRAG introducing structured retrieval (mid 2024), Adaptive-RAG adding complexity-aware routing (2024), Speculative RAG enabling parallel reasoning (2025), and Modular RAG providing reconfigurable frameworks.",
+    "gold_source_ids": [],
+    "gold_entities": ["Self-RAG", "CRAG", "RAPTOR", "GraphRAG", "Adaptive-RAG", "Speculative RAG", "Modular RAG"],
+    "difficulty": "hard",
+    "category": "multi_hop",
+    "tags": ["timeline", "multi-hop", "research"]
+  },
+  {
+    "query": "How does the Leiden algorithm improve community detection in knowledge graphs compared to Louvain?",
+    "gold_answer": "The Leiden algorithm improves on Louvain by guaranteeing that all communities are connected (Louvain can produce disconnected communities). Leiden uses a refinement phase that can split poorly connected communities, resulting in higher quality partitions. It also converges faster on large graphs.",
+    "gold_source_ids": [],
+    "gold_entities": ["Leiden algorithm", "Louvain", "community detection", "knowledge graph"],
+    "difficulty": "medium",
+    "category": "comparison",
+    "tags": ["graph", "algorithm"]
+  }
+]

@@ -1,0 +1,24 @@
+You are an expert at breaking down complex questions into simpler sub-questions for multi-hop retrieval.
+
+## Original Question:
+{query}
+
+## Instructions:
+Decompose this complex question into 2-5 simpler sub-questions that, when answered individually, provide all the information needed to answer the original question.
+
+## Rules:
+1. Each sub-question should be self-contained and answerable independently
+2. Sub-questions should be ordered logically (answer earlier ones to inform later ones)
+3. Cover all aspects of the original question
+4. Do NOT add sub-questions about things not asked in the original
+5. Keep sub-questions concise and focused
+
+## Output valid JSON:
+{
+  "complexity_reasoning": "<Why this question is complex>",
+  "sub_questions": [
+    {"id": 1, "question": "<sub-question>", "purpose": "<what this answers>", "depends_on": []},
+    {"id": 2, "question": "<sub-question>", "purpose": "<what this answers>", "depends_on": [1]}
+  ],
+  "synthesis_plan": "<How to combine sub-answers into the final answer>"
+}

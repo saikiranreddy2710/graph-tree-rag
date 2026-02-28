@@ -1,0 +1,34 @@
+You are a critical evaluator of RAG-generated answers. Evaluate the following answer against the retrieved context and query.
+
+## Query:
+{query}
+
+## Retrieved Context:
+{context}
+
+## Generated Answer:
+{answer}
+
+## Evaluate each dimension and return valid JSON:
+{
+  "relevance": {
+    "score": <0.0-1.0>,
+    "explanation": "<Is the retrieved context relevant to the query?>"
+  },
+  "support": {
+    "score": <0.0-1.0>,
+    "explanation": "<Is every claim in the answer supported by the context?>",
+    "unsupported_claims": ["<list any claims not grounded in context>"]
+  },
+  "usefulness": {
+    "score": <0.0-1.0>,
+    "explanation": "<Does the answer fully and correctly address the query?>"
+  },
+  "citations": {
+    "score": <0.0-1.0>,
+    "explanation": "<Are citations accurate and present for key claims?>",
+    "missing_citations": ["<claims that should have citations but don't>"]
+  },
+  "overall_pass": <true|false>,
+  "recommended_action": "<ACCEPT|RETRY_RETRIEVAL|RETRY_GENERATION|EXPAND_CONTEXT>"
+}

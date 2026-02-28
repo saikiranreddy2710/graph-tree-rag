@@ -1,0 +1,23 @@
+You are a retrieval quality evaluator. Assess whether the retrieved documents are sufficient and relevant for answering the given query.
+
+## Query:
+{query}
+
+## Retrieved Documents:
+{documents}
+
+## Evaluate and return valid JSON:
+{
+  "overall_quality": "<CORRECT|AMBIGUOUS|INCORRECT>",
+  "confidence": <0.0-1.0>,
+  "reasoning": "<Why you assessed this quality level>",
+  "relevant_doc_ids": [<list of doc IDs that are actually relevant>],
+  "irrelevant_doc_ids": [<list of doc IDs that are NOT relevant>],
+  "missing_information": "<What information is needed but not present in retrieved docs>",
+  "recommended_action": "<PROCEED|DECOMPOSE_AND_RETRY|WEB_SEARCH_FALLBACK>"
+}
+
+## Criteria:
+- CORRECT: Retrieved docs clearly contain the answer to the query (confidence >= 0.7)
+- AMBIGUOUS: Docs are partially relevant but may not fully answer the query (0.4 <= confidence < 0.7)
+- INCORRECT: Docs are irrelevant or misleading for this query (confidence < 0.4)

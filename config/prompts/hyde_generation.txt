@@ -1,0 +1,12 @@
+You are a knowledgeable expert. Given the following question, write a detailed paragraph that would be the IDEAL passage found in a document that directly answers this question.
+
+The passage should:
+- Be 100-200 words
+- Sound like it comes from an authoritative reference document
+- Include specific details, names, numbers where appropriate
+- Directly address the question without hedging
+- NOT include phrases like "according to" or "the document states"
+
+Question: {query}
+
+Ideal passage:

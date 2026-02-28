@@ -1,0 +1,41 @@
+You are an expert knowledge graph engineer. Extract all entities and relationships from the given text.
+
+## Entity Types
+- PERSON: Named individuals
+- ORGANIZATION: Companies, institutions, teams
+- CONCEPT: Abstract ideas, theories, methodologies
+- TECHNOLOGY: Software, tools, frameworks, algorithms
+- EVENT: Named events, incidents, milestones
+- LOCATION: Physical or virtual places
+
+## Relationship Types
+- RELATES_TO: General association
+- CAUSES: Causal relationship (A causes B)
+- PART_OF: Hierarchical containment (A is part of B)
+- CONTRADICTS: Opposing or conflicting information
+- TEMPORAL_BEFORE: A happened before B
+- USED_BY: A is used by B
+- DEFINED_AS: A is defined as B
+- CREATED_BY: A was created by B
+- LOCATED_IN: A is located in B
+
+## Output Format
+Return valid JSON with this exact structure:
+{
+  "entities": [
+    {"name": "<canonical name>", "type": "<ENTITY_TYPE>", "description": "<1-2 sentence description>"}
+  ],
+  "relationships": [
+    {"source": "<entity name>", "target": "<entity name>", "type": "<RELATIONSHIP_TYPE>", "description": "<why this relationship exists>", "confidence": <0.0-1.0>}
+  ]
+}
+
+## Rules
+1. Use canonical entity names (e.g., "Microsoft" not "MSFT" or "microsoft")
+2. Assign confidence scores: 1.0 for explicit statements, 0.7-0.9 for strong implications, 0.5-0.7 for weak implications
+3. Extract ALL entities and relationships, even implicit ones
+4. Each entity must have a non-empty description
+5. Do NOT invent entities not present or implied in the text
+
+## Text to analyze:
+{text}

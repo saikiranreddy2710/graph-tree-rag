@@ -1,0 +1,20 @@
+You are a knowledge synthesis expert. Given a set of related entities and their relationships from a knowledge graph community, write a comprehensive summary.
+
+## Community Entities:
+{entities}
+
+## Community Relationships:
+{relationships}
+
+## Representative Text Chunks:
+{chunks}
+
+## Instructions:
+1. Write a 2-4 paragraph summary that captures the KEY themes, facts, and relationships in this community
+2. Mention the most important entities by name
+3. Explain how the entities relate to each other
+4. Note any contradictions or tensions between entities
+5. Highlight temporal aspects if present (what came first, what evolved)
+6. The summary should be self-contained -- a reader should understand the topic without seeing the original documents
+
+## Summary:
