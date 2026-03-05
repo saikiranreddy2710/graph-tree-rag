@@ -6,12 +6,6 @@
 
 **Tree Routing + Graph Traversal + Speculative Generation + Self-Correction**
 
-Eight recent research papers. One unified pipeline.
-
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://img.shields.io/badge/tests-42%20passed-brightgreen.svg)](#testing)
-[![arXiv Papers](https://img.shields.io/badge/arXiv-8%20papers-b31b1b.svg)](#research-foundation)
 
 ---
 
