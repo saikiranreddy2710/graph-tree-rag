@@ -115,6 +115,27 @@ class Settings(BaseSettings):
     # ── Adaptive Router ────────────────────────────────────────────────
     router_default_strategy: RetrievalStrategy = Field(default=RetrievalStrategy.MODERATE)
 
+    # ── Neural Graph (Unified Vector-Graph) ────────────────────────────
+    neural_graph_enabled: bool = Field(default=True)
+    neural_graph_persist_path: Path = Field(default=Path("data/neural_graph"))
+    neural_graph_similarity_threshold: float = Field(
+        default=0.7, description="Min cosine sim for auto-edges between chunks"
+    )
+    neural_graph_decay_factor: float = Field(
+        default=0.7, description="Activation decay per hop in spreading activation"
+    )
+    neural_graph_max_hops: int = Field(
+        default=3, description="Max propagation hops in spreading activation"
+    )
+    neural_graph_activation_threshold: float = Field(
+        default=0.1, description="Min activation to include in results"
+    )
+    neural_graph_initial_top_k: int = Field(
+        default=15, description="Initial FAISS candidates for seed activation"
+    )
+    neural_graph_top_k: int = Field(default=10, description="Final neural results returned")
+    fusion_weights_neural: float = Field(default=0.35)
+
     # ── Security ───────────────────────────────────────────────────────
     security_prompt_guard_enabled: bool = Field(default=True)
     security_pii_filter_enabled: bool = Field(default=True)

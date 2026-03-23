@@ -38,6 +38,7 @@ class HybridFuser:
         weight_bm25: float = settings.fusion_weights_bm25,
         weight_graph: float = settings.fusion_weights_graph,
         weight_tree: float = settings.fusion_weights_tree,
+        weight_neural: float = settings.fusion_weights_neural,
         rrf_k: int = settings.fusion_rrf_k,
     ):
         self.weights = {
@@ -45,6 +46,7 @@ class HybridFuser:
             "bm25": weight_bm25,
             "graph": weight_graph,
             "tree": weight_tree,
+            "neural": weight_neural,
         }
         self.rrf_k = rrf_k
 
@@ -71,6 +73,7 @@ class HybridFuser:
         bm25_results: list[dict],
         graph_results: list[dict],
         tree_results: list[dict],
+        neural_results: list[dict] | None = None,
         top_k: int = settings.final_top_k,
     ) -> list[FusedResult]:
         """
@@ -87,6 +90,8 @@ class HybridFuser:
             "graph": graph_results,
             "tree": tree_results,
         }
+        if neural_results:
+            channels["neural"] = neural_results
 
         # Build per-document aggregated scores
         doc_scores: dict[str, FusedResult] = {}
