@@ -115,6 +115,22 @@ class Settings(BaseSettings):
     # ── Adaptive Router ────────────────────────────────────────────────
     router_default_strategy: RetrievalStrategy = Field(default=RetrievalStrategy.MODERATE)
 
+    # ── CortexStore (Brain-Inspired Storage) ──────────────────────────
+    cortex_enabled: bool = Field(default=True)
+    cortex_persist_path: Path = Field(default=Path("data/cortex_store"))
+    cortex_num_columns: int = Field(default=10, description="Number of cortical columns (GMM clusters)")
+    cortex_hebbian_lr: float = Field(default=0.05, description="Hebbian learning rate for synapse updates")
+    cortex_decay_rate: float = Field(default=0.01, description="Synapse decay rate per consolidation")
+    cortex_decay_factor: float = Field(default=0.7, description="Activation decay per hop")
+    cortex_pruning_threshold: float = Field(default=0.05, description="Min weight before synapse pruning")
+    cortex_working_memory_capacity: int = Field(default=15, description="Working memory size (~7±2 in brain)")
+    cortex_consolidation_interval: int = Field(default=50, description="Consolidate every N queries")
+    cortex_merge_threshold: float = Field(default=0.95, description="Cosine sim for node merging")
+    cortex_max_hops: int = Field(default=3, description="Max propagation hops")
+    cortex_activation_threshold: float = Field(default=0.1, description="Min activation for results")
+    cortex_top_k: int = Field(default=10, description="Final cortex results returned")
+    fusion_weights_cortex: float = Field(default=0.35)
+
     # ── Security ───────────────────────────────────────────────────────
     security_prompt_guard_enabled: bool = Field(default=True)
     security_pii_filter_enabled: bool = Field(default=True)

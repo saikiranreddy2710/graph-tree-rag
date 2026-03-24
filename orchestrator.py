@@ -24,11 +24,13 @@ from generation.speculative_rag import SpeculativeRAG
 from ingestion.document_processor import DocumentChunk, DocumentProcessor
 from ingestion.entity_extractor import EntityExtractor
 from ingestion.graph_builder import GraphBuilder, KnowledgeGraph
+from ingestion.cortex_store import CortexStore, CortexStoreBuilder
 from ingestion.tree_builder import RaptorTree, TreeBuilder
 from ingestion.vector_indexer import VectorIndexer
 from retrieval.graph_retriever import GraphRetriever
 from retrieval.hybrid_fuser import FusedResult, HybridFuser
 from retrieval.hyde import HyDEAugmenter
+from retrieval.cortex_retriever import CortexRetriever
 from retrieval.query_router import QueryRouter
 from retrieval.reranker import ReRanker
 from retrieval.tree_retriever import TreeRetriever
@@ -57,6 +59,7 @@ class GraphTreeRAG:
         self.vector_indexer = VectorIndexer()
         self.kg: Optional[KnowledgeGraph] = None
         self.tree: Optional[RaptorTree] = None
+        self.cortex: Optional[CortexStore] = None
         self.chunks: list[DocumentChunk] = []
 
         # Pipeline components
@@ -71,6 +74,7 @@ class GraphTreeRAG:
         # Lazy-initialized retrieval channels
         self._graph_retriever: Optional[GraphRetriever] = None
         self._tree_retriever: Optional[TreeRetriever] = None
+        self._cortex_retriever: Optional[CortexRetriever] = None
         self._reranker: Optional[ReRanker] = None
 
     @property
@@ -90,6 +94,12 @@ class GraphTreeRAG:
         if self._reranker is None:
             self._reranker = ReRanker(kg=self.kg)
         return self._reranker
+
+    @property
+    def cortex_retriever(self) -> Optional[CortexRetriever]:
+        if self._cortex_retriever is None and self.cortex:
+            self._cortex_retriever = CortexRetriever(self.cortex)
+        return self._cortex_retriever
 
     # ── Ingestion ──────────────────────────────────────────────────────
 
@@ -129,9 +139,21 @@ class GraphTreeRAG:
         self.vector_indexer.build_from_chunks(self.chunks, self.tree)
         self.vector_indexer.save()
 
+        # Step 6: Build CortexStore (brain-inspired storage)
+        if settings.cortex_enabled:
+            cortex_builder = CortexStoreBuilder()
+            self.cortex = cortex_builder.build(
+                chunks=self.chunks,
+                entities=entities,
+                relationships=relationships,
+                tree=self.tree,
+            )
+            self.cortex.save()
+
         # Reset lazy-loaded components
         self._graph_retriever = None
         self._tree_retriever = None
+        self._cortex_retriever = None
         self._reranker = None
 
         elapsed = time.time() - start
@@ -163,10 +185,13 @@ class GraphTreeRAG:
             self.tree = tree_builder.load()
         if settings.faiss_index_path.exists():
             self.vector_indexer.load()
+        if settings.cortex_enabled and settings.cortex_persist_path.exists():
+            self.cortex = CortexStore.load()
 
         # Reset lazy-loaded components
         self._graph_retriever = None
         self._tree_retriever = None
+        self._cortex_retriever = None
         self._reranker = None
 
         logger.info("Loaded all indices from disk")
@@ -303,12 +328,36 @@ class GraphTreeRAG:
         trace.channels_used = list(retrieval_tasks.keys())
         trace.channel_result_counts = {k: len(v) for k, v in retrieval_tasks.items()}
 
+        # ── Step 4b: CortexStore Retrieval (Spreading Activation + Hebbian) ──
+        cortex_results_for_fusion = None
+        if settings.cortex_enabled and self.cortex_retriever:
+            cortex_raw, cortex_trace = self.cortex_retriever.retrieve(query_embedding)
+            cortex_results_for_fusion = [
+                {
+                    "chunk_id": r.node_id,
+                    "text": r.text,
+                    "score": r.activation,
+                    "source_type": "cortex",
+                    "entities_matched": r.entities_matched,
+                    "metadata": {
+                        **r.metadata,
+                        "hop_distance": r.hop_distance,
+                        "node_type": r.node_type,
+                        "column_id": r.column_id,
+                    },
+                }
+                for r in cortex_raw
+            ]
+            trace.channels_used.append("cortex")
+            trace.channel_result_counts["cortex"] = len(cortex_results_for_fusion)
+
         # ── Step 5: Hybrid Fusion + Re-ranking ────────────────────────
         fused_results = self.fuser.fuse(
             vector_results=retrieval_tasks["vector"],
             bm25_results=retrieval_tasks["bm25"],
             graph_results=retrieval_tasks["graph"],
             tree_results=retrieval_tasks["tree"],
+            cortex_results=cortex_results_for_fusion,
         )
 
         # RBAC filtering
