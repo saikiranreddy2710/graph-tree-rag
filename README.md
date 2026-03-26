@@ -6,10 +6,10 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
 
-**Advanced Hybrid Retrieval-Augmented Generation (RAG) System**
-*Tree Routing + Graph Traversal + Speculative Generation + Self-Correction*
+**Advanced Brain-Inspired Retrieval-Augmented Generation (RAG) System**
+*CortexStore + Tree Routing + Graph Traversal + Speculative Generation + Self-Correction*
 
-[Features](#why-this-project-is-useful) • [Installation](#how-users-can-get-started) • [Usage](#usage) • [Help & Support](#where-users-can-get-help) • [Contributing](#who-maintains-and-contributes)
+[Features](#why-this-project-is-useful-our-new-goal) • [Architecture](#-the-cortexstore-architecture) • [Installation](#how-users-can-get-started) • [Usage](#usage-examples) • [Help & Support](#where-users-can-get-help)
 
 </div>
 
@@ -17,23 +17,29 @@
 
 ## What the Project Does
 
-**Graph-Tree RAG** is a production-ready, highly modular Retrieval-Augmented Generation pipeline. It solves the limitations of standard vector-search RAG by connecting facts across multiple documents, answering global queries ("What are the main themes?"), and verifying its own generated output.
+**Graph-Tree RAG** is a production-ready, highly modular Retrieval-Augmented Generation pipeline. We have officially shifted our core architecture away from static neural graphs to a **dynamic, self-organizing storage model known as CortexStore**.
 
-This project combines state-of-the-art research (GraphRAG, RAPTOR, CRAG, Self-RAG, MoT, HyDE) into a unified application. It implements a fully controllable, multi-channel retrieval process that includes dense vector search, sparse keyword search, knowledge graph traversal, and hierarchical tree search—alongside a novel, brain-inspired cortex storage module.
+By integrating core cognitive mechanisms into the orchestrator pipeline, this system mimics the brain's nervous system behavior. Graph-Tree RAG gets smarter with every query. It solves the limitations of standard vector-search RAG by connecting facts across multiple documents, tracking its own usage patterns, and physically evolving its retrieval structure based on real user queries.
 
 ---
 
-## Why the Project is Useful
+## Why the Project is Useful: Our New Goal
 
-Standard dense retrieval often fails on complex, multi-hop reasoning questions or overlapping semantics. Graph-Tree RAG is designed to overcome these hurdles with the following key features:
+Our ultimate objective is to achieve **high-performance retrieval at scale (1M+ nodes)** while enabling the system to organically evolve and improve its accuracy. Standard dense retrieval fails on complex reasoning or overlapping semantics; standard graph traversal is static. We combine the best of both into a highly dynamic, living system.
 
-### ✨ Key Features and Benefits
+### 🧠 The CortexStore Architecture
+The new CortexStore models a biological brain through four profound cognitive mechanisms:
 
-- **Multi-Channel Retrieval**: Runs 4+ retrieval strategies concurrently (FAISS, BM25, KG entity walk, RAPTOR summaries, Cortex activation), merging results through learned Reciprocal Rank Fusion.
-- **Adaptive Routing**: Intelligently skips retrieval for simple queries or decomposes complex queries using Chain-of-Thought (CoT) reasoning.
-- **Self-Correction (Self-RAG & CRAG)**: Evaluates the retrieval context before generating. If the context is poor, it falls back to a web search. The pipeline then reflects on its own answer (relevance, factual support) and triggers correction loops if necessary.
-- **Speculative Draft Generation (MoT)**: Partitions context and generates 3 diverse answer drafts in parallel using smaller models, synthesizing the best into the final response with a stronger model.
-- **Built-In Security Layer**: Protects against prompt injections and immediately filters out PII data (using Presidio or Regex fallback) on both input and output. Role-based access control (RBAC) securely filters contexts at the retrieval level.
+- **Hebbian Learning ("Neurons that fire together, wire together")**: Synaptic connections between chunks of knowledge learn from usage. When related facts are retrieved together, their connection weight strengthens automatically.
+- **Synaptic Pruning & Memory Consolidation**: Like the brain during sleep, unused connections weaken and eventually decay. Highly similar knowledge nodes merge into consolidated concepts, optimizing storage without losing context.
+- **Cortical Columns**: Knowledge self-organizes into semantic clusters (columns), allowing the retrieval pipeline to perform fast, macro-level activation before diving into individual nodes.
+- **Working Memory Buffer**: A capacity-limited buffer tracks transient activations per query session, providing immediate context boosts for complex, multi-hop reasoning.
+
+### ✨ Additional Key Features
+- **Multi-Channel Retrieval**: Runs multiple strategies concurrently (Cortex activation, FAISS, BM25, KG entity walk, RAPTOR summaries), merging results through learned Reciprocal Rank Fusion.
+- **Adaptive Routing & Self-Correction**: Intelligently skips retrieval for descriptive queries. Evaluates retrieved context and falls back to authoritative web searches if needed. 
+- **Speculative Draft Generation (MoT)**: Partitions context and generates diverse drafts in parallel, synthesizing them for a comprehensive final response.
+- **Built-In Security Layer**: Protects against prompt injections and immediately filters out PII data.
 
 ---
 
@@ -47,16 +53,13 @@ Standard dense retrieval often fails on complex, multi-hop reasoning questions o
 ### Installation & Setup
 
 1. **Clone the repository:**
-
    ```bash
    git clone https://github.com/saikiranreddy2710/graph-tree-rag.git
    cd graph-tree-rag
    ```
 
 2. **Set up the environment:**
-
    Create a virtual environment and install the package (with development dependencies).
-
    ```bash
    python -m venv .venv
    source .venv/bin/activate
@@ -64,9 +67,7 @@ Standard dense retrieval often fails on complex, multi-hop reasoning questions o
    ```
 
 3. **Configure the application:**
-
    Copy the example environment variables and add your own API credentials.
-
    ```bash
    cp .env.example .env
    # Edit .env file to include OPENAI_API_KEY or ANTHROPIC_API_KEY
@@ -74,52 +75,46 @@ Standard dense retrieval often fails on complex, multi-hop reasoning questions o
 
 ### Usage Examples
 
-#### 1. Ingest Documents
+#### 1. Ingest Documents (Building the Cortex)
 
-Before answering questions, ingest a set of documents to build the core indices (graph, tree, and vectors).
-
+Before answering questions, ingest documents. The system will automatically build the initial chunk nodes, extract entities, and assign cortical columns to establish the baseline brain structure.
 ```bash
 # Ingest an entire directory (supports .txt, .md, .html, .py, etc.)
 gtr ingest /path/to/your/documents
 ```
 
-#### 2. Query the Knowledge Base
+#### 2. Query the CortexStore (Learning via Retrieval)
 
-You can interact with the pipeline using the command-line interface. Use the `--verbose` flag to see the exact retrieval trace, trace metrics, and pipeline decisions.
+Query the knowledge base using the command-line interface. **With every query, the Hebbian learning mechanism updates synapse weights**. Use the `--verbose` flag to see the exact neural trace, cortical columns activated, and synapses strengthened.
 
 ```bash
-# Simple descriptive question
-gtr query "What are the main approaches to retrieval-augmented generation?"
-
-# Complex comparison, printing the full trace
-gtr query "Compare GraphRAG and RAPTOR methodologies" --verbose
+# Complex comparison, printing the full neural trace
+gtr query "Compare standard RAG to brain-inspired memory models" --verbose
 ```
 
 #### 3. Start the API Server
 
 Serve the application as a standalone REST container using FastAPI:
-
 ```bash
 gtr serve --port 8000
 ```
-
-You can then issue `POST` requests directly via curl or view the interactive Swagger UI at `http://localhost:8000/docs`.
+Query it via `curl` or explore the Swagger UI at `http://localhost:8000/docs`.
 
 ```bash
 curl -X POST http://localhost:8000/query \
   -H "Content-Type: application/json" \
-  -d '{"query": "Explain the concept of speculative generation."}'
+  -d '{"query": "How does Hebbian plasticity improve retrieval?"}'
 ```
 
 ---
 
 ## Where Users Can Get Help
 
-If you encounter issues, have questions, or need guidance on tuning parameters for your specific data:
+If you encounter issues, have questions, or need guidance on tuning hyperparameters for your specific data:
 
-- **Issues / Bug Tracker**: Use the [GitHub Issues](https://github.com/saikiranreddy2710/graph-tree-rag/issues) page to report unexpected behavior or request new features.
-- **Detailed Documentation**: For deep dives into the pipeline's structure, models config, and paper references, see our [docs/](docs/) folder (coming soon). Check the source code docstrings for low-level function references.
-- **Evaluation Guide**: Run the built-in testing pipeline using `gtr evaluate` to track your evaluation metrics after tweaking parameters.
+- **Issues / Bug Tracker**: Use the [GitHub Issues](https://github.com/saikiranreddy2710/graph-tree-rag/issues) page to report unexpected behavior.
+- **Detailed Documentation**: For deep dives into the CortexStore pipeline, cortical columns configuration, and paper references, see our `docs/` folder. Check `ingestion/cortex_store.py` and `retrieval/cortex_retriever.py` for low-level mechanics.
+- **Evaluation Benchmark**: Run the built-in benchmarking pipeline using `gtr evaluate` to track retrieval accuracy dynamically against standard RAG baselines.
 
 ---
 
@@ -128,14 +123,11 @@ If you encounter issues, have questions, or need guidance on tuning parameters f
 This project is authored and maintained by **[Sai Kiran Reddy](https://github.com/saikiranreddy2710)**. 
 
 ### Contribution Guidelines
-
-We welcome community contributions, ranging from adding new retrieval mechanisms or LLM providers to enhancing the test suite. 
-
-To contribute:
+We welcome community contributions! We are particularly interested in enhancements to learning rates, pruning algorithms, and scaling the CortexStore to efficiently handle **1M+ nodes**.
 1. Fork the repo and create your feature branch.
 2. Ensure you add or update relevant unit tests in the `tests/` directory.
-3. Verify the pipeline by running `pytest` (we ensure zero regressions).
-4. For detailed coding standards, environment setup, and pull-request procedures, please refer to our [CONTRIBUTING.md](CONTRIBUTING.md).
+3. Validate neural trace behaviors using the `--verbose` flag.
+4. Please refer to our [CONTRIBUTING.md](CONTRIBUTING.md) for detailed coding standards.
 
 ### License
 This project is licensed under the [MIT License](LICENSE) - see the LICENSE file for details.
