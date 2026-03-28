@@ -49,6 +49,10 @@ class CortexNode:
     node_type: str = "chunk"  # chunk | entity | summary | consolidated
     entity_names: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+    
+    # TurboQuant Compressed state
+    polar_q: Optional[np.ndarray] = None
+    qjl_signs: Optional[np.ndarray] = None
 
     # Brain-like properties
     activation: float = 0.0              # transient — current query activation
@@ -61,6 +65,15 @@ class CortexNode:
         self.activation = activation_value
         self.access_count += 1
         self.last_accessed = datetime.utcnow().isoformat()
+
+    def get_embedding(self, compressor: Optional[Any] = None) -> Optional[np.ndarray]:
+        """Get the float32 embedding, decompressing on-the-fly if needed to save RAM."""
+        if self.embedding is not None:
+            return self.embedding
+        if self.polar_q is not None and self.qjl_signs is not None and compressor is not None:
+            # Expand to 2D for compressor, extract 1D back
+            return compressor.decompress(self.polar_q.reshape(1, -1), self.qjl_signs.reshape(1, -1))[0]
+        return None
 
     def to_dict(self) -> dict:
         return {
@@ -261,6 +274,11 @@ class CortexStore:
         self.nodes: dict[str, CortexNode] = {}
         self.columns: dict[str, CorticalColumn] = {}
         self.working_memory = WorkingMemory()
+        
+        self.compressor = None
+        if settings.cortex_turboquant_enabled:
+            from ingestion.turboquant import TurboQuantCompressor
+            self.compressor = TurboQuantCompressor(settings.embedding_dimension, settings.cortex_turboquant_bits)
 
         # FAISS indices
         self._column_index: Optional[faiss.IndexFlatIP] = None
@@ -317,7 +335,7 @@ class CortexStore:
 
     def build_columns(self, n_columns: int = settings.cortex_num_columns) -> None:
         """Build cortical columns via GMM clustering of node embeddings."""
-        embedded = [(nid, n.embedding) for nid, n in self.nodes.items() if n.embedding is not None]
+        embedded = [(nid, n.get_embedding(self.compressor)) for nid, n in self.nodes.items() if n.get_embedding(self.compressor) is not None]
         if len(embedded) < n_columns:
             # Too few nodes — one column for all
             col = CorticalColumn(
@@ -382,7 +400,7 @@ class CortexStore:
 
     def build_node_index(self) -> None:
         """Build FAISS index over all node embeddings."""
-        embedded = [(nid, n.embedding) for nid, n in self.nodes.items() if n.embedding is not None]
+        embedded = [(nid, n.get_embedding(self.compressor)) for nid, n in self.nodes.items() if n.get_embedding(self.compressor) is not None]
         if not embedded:
             return
 
@@ -510,7 +528,7 @@ class CortexStore:
         stats["merged"] = self._merge_similar_nodes()
 
         # Step 4: Recompute column centroids
-        emb_dict = {nid: n.embedding for nid, n in self.nodes.items() if n.embedding is not None}
+        emb_dict = {nid: n.get_embedding(self.compressor) for nid, n in self.nodes.items() if n.get_embedding(self.compressor) is not None}
         for col in self.columns.values():
             col.member_ids = [mid for mid in col.member_ids if mid in self.nodes]
             col.update_centroid(emb_dict)
@@ -526,12 +544,12 @@ class CortexStore:
 
         chunk_nodes = [
             (nid, n) for nid, n in self.nodes.items()
-            if n.embedding is not None and n.node_type == "chunk"
+            if n.get_embedding(self.compressor) is not None and n.node_type == "chunk"
         ]
 
         for i, (id_a, node_a) in enumerate(chunk_nodes):
             for id_b, node_b in chunk_nodes[i + 1:]:
-                sim = float(np.dot(node_a.embedding, node_b.embedding))
+                sim = float(np.dot(node_a.get_embedding(self.compressor), node_b.get_embedding(self.compressor)))
                 if sim >= settings.cortex_merge_threshold:
                     # Merge b into a (keep the one accessed more)
                     if node_a.access_count >= node_b.access_count:
@@ -551,9 +569,15 @@ class CortexStore:
             keep.text = keep.text + "\n\n" + remove.text
             keep.entity_names = list(set(keep.entity_names + remove.entity_names))
             keep.access_count += remove.access_count
-            if keep.embedding is not None and remove.embedding is not None:
-                combined = (keep.embedding + remove.embedding) / 2.0
+            
+            k_emb = keep.get_embedding(self.compressor)
+            r_emb = remove.get_embedding(self.compressor)
+            if k_emb is not None and r_emb is not None:
+                combined = (k_emb + r_emb) / 2.0
                 keep.embedding = combined / (np.linalg.norm(combined) + 1e-8)
+                # Clear quantized forms if any, since we merged them
+                keep.polar_q = None
+                keep.qjl_signs = None
             keep.node_type = "consolidated"
 
             # Redirect all edges from removed node to kept node
@@ -649,7 +673,13 @@ class CortexStore:
             json.dump(self.to_dict(), f, indent=2, default=str)
 
         # Embeddings
-        emb_data = {nid: n.embedding for nid, n in self.nodes.items() if n.embedding is not None}
+        emb_data = {}
+        for nid, n in self.nodes.items():
+            if n.embedding is not None:
+                emb_data[nid] = n.embedding
+            elif n.polar_q is not None and n.qjl_signs is not None:
+                emb_data[nid] = {"pq": n.polar_q, "qjl": n.qjl_signs}
+
         with open(path / "embeddings.pkl", "wb") as f:
             pickle.dump(emb_data, f)
 
@@ -692,7 +722,11 @@ class CortexStore:
                 emb_data = pickle.load(f)
             for nid, emb in emb_data.items():
                 if nid in cs.nodes:
-                    cs.nodes[nid].embedding = emb
+                    if isinstance(emb, dict) and "pq" in emb and "qjl" in emb:
+                        cs.nodes[nid].polar_q = emb["pq"]
+                        cs.nodes[nid].qjl_signs = emb["qjl"]
+                    else:
+                        cs.nodes[nid].embedding = emb
 
         # Column centroids
         centroid_path = path / "centroids.pkl"
@@ -763,6 +797,11 @@ class CortexStoreBuilder:
         # Step 1: Chunk nodes
         chunk_texts = [c.text for c in chunks]
         chunk_embs = self._embed(chunk_texts) if chunk_texts else np.array([])
+        
+        if len(chunk_embs) > 0 and cs.compressor is not None:
+            chunk_polar_qs, chunk_qjl_signs = cs.compressor.compress(chunk_embs)
+        else:
+            chunk_polar_qs, chunk_qjl_signs = None, None
 
         for i, chunk in enumerate(chunks):
             chunk_entities = [
@@ -771,26 +810,42 @@ class CortexStoreBuilder:
             node = CortexNode(
                 node_id=chunk.chunk_id,
                 text=chunk.text,
-                embedding=chunk_embs[i] if len(chunk_embs) > 0 else None,
                 node_type="chunk",
                 entity_names=chunk_entities,
                 metadata={"source": chunk.metadata.source, "section": chunk.metadata.section_header},
             )
+            # Assign compressed vs float representations
+            if chunk_polar_qs is not None:
+                node.polar_q = chunk_polar_qs[i]
+                node.qjl_signs = chunk_qjl_signs[i]
+            elif len(chunk_embs) > 0:
+                node.embedding = chunk_embs[i]
+                
             cs.add_node(node)
 
         # Step 2: Entity nodes
         ent_texts = [f"{e.name}: {e.description}" for e in entities]
         ent_embs = self._embed(ent_texts) if ent_texts else np.array([])
+        
+        if len(ent_embs) > 0 and cs.compressor is not None:
+            ent_polar_qs, ent_qjl_signs = cs.compressor.compress(ent_embs)
+        else:
+            ent_polar_qs, ent_qjl_signs = None, None
 
         for i, ent in enumerate(entities):
             node = CortexNode(
                 node_id=f"entity_{ent.name.lower().replace(' ', '_')}",
                 text=f"{ent.name} ({ent.entity_type}): {ent.description}",
-                embedding=ent_embs[i] if len(ent_embs) > 0 else None,
                 node_type="entity",
                 entity_names=[ent.name],
                 metadata={"entity_type": ent.entity_type},
             )
+            if ent_polar_qs is not None:
+                node.polar_q = ent_polar_qs[i]
+                node.qjl_signs = ent_qjl_signs[i]
+            elif len(ent_embs) > 0:
+                node.embedding = ent_embs[i]
+                
             cs.add_node(node)
 
         # Step 3: Tree summary nodes
