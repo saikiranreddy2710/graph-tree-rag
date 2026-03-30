@@ -95,6 +95,10 @@ class QJLTransformer:
         self.d = d
         # Project into same dims if None, or a target dimensionality
         self.proj_dim = proj_dim or d
+        # FAISS IndexBinaryFlat requires dimensions to be a multiple of 8
+        if self.proj_dim % 8 != 0:
+            self.proj_dim = ((self.proj_dim // 8) + 1) * 8
+            
         np.random.seed(seed + 1)
         # Gaussian random projection matrix
         self.jl_matrix = np.random.randn(self.proj_dim, self.d).astype(np.float32) / np.sqrt(self.proj_dim)
@@ -102,21 +106,23 @@ class QJLTransformer:
     def compress_residual(self, residual: np.ndarray) -> np.ndarray:
         """
         Project the residual and quantize to 1-bit (+1 or -1).
-        Input shape: (N, d), Output shape: (N, proj_dim) Int8
+        Returned as packed bits (uint8) for advanced FAISS Binary integration.
+        Input shape: (N, d), Output shape: (N, proj_dim // 8) uint8
         """
         projected = residual @ self.jl_matrix.T
-        # 1-bit sign: 1 if >= 0 else -1. Stored as int8.
-        signs = np.where(projected >= 0, 1, -1).astype(np.int8)
-        return signs
+        # 1-bit sign: 1 if >= 0 else 0
+        signs = np.where(projected >= 0, 1, 0).astype(np.uint8)
+        packed = np.packbits(signs, axis=-1)
+        return packed
 
-    def reconstruct_residual(self, signs: np.ndarray) -> np.ndarray:
+    def reconstruct_residual(self, packed_signs: np.ndarray) -> np.ndarray:
         """
-        Estimate the residual from the 1-bit signs.
-        Note: This is an estimation, reconstructing standard vectors from JL bits.
+        Estimate the residual from the packed 1-bit signs.
         """
-        # (N, proj_dim) @ (proj_dim, d) -> (N, d)
-        # Multiply by a compensation factor (simplified here)
-        return (signs.astype(np.float32) @ self.jl_matrix)
+        signs = np.unpackbits(packed_signs, axis=-1)
+        # Restore to +1 / -1
+        signs_float = np.where(signs > 0, 1, -1).astype(np.float32)
+        return signs_float @ self.jl_matrix
 
 
 class TurboQuantCompressor:

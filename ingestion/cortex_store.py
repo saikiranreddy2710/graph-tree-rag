@@ -400,17 +400,32 @@ class CortexStore:
 
     def build_node_index(self) -> None:
         """Build FAISS index over all node embeddings."""
-        embedded = [(nid, n.get_embedding(self.compressor)) for nid, n in self.nodes.items() if n.get_embedding(self.compressor) is not None]
-        if not embedded:
-            return
+        if self.compressor is not None:
+            # Native C++ Binary FAISS indexing for extreme speed and memory savings
+            embedded = [(nid, n.qjl_signs) for nid, n in self.nodes.items() if n.qjl_signs is not None]
+            if not embedded:
+                return
 
-        dim = embedded[0][1].shape[0]
-        embs = np.array([emb for _, emb in embedded], dtype=np.float32)
+            dim_bits = self.compressor.qjl.proj_dim
+            self._node_index = faiss.IndexBinaryFlat(dim_bits)
+            
+            # Add packed uint8 representations directly to C++ memory
+            packed_embs = np.array([emb for _, emb in embedded], dtype=np.uint8)
+            self._node_index.add(packed_embs)
+            self._node_id_map = {i: nid for i, (nid, _) in enumerate(embedded)}
+            self._node_id_reverse = {nid: i for i, (nid, _) in enumerate(embedded)}
+        else:
+            embedded = [(nid, n.get_embedding(self.compressor)) for nid, n in self.nodes.items() if n.get_embedding(self.compressor) is not None]
+            if not embedded:
+                return
 
-        self._node_index = faiss.IndexFlatIP(dim)
-        self._node_index.add(embs)
-        self._node_id_map = {i: nid for i, (nid, _) in enumerate(embedded)}
-        self._node_id_reverse = {nid: i for i, (nid, _) in enumerate(embedded)}
+            dim = embedded[0][1].shape[0]
+            embs = np.array([emb for _, emb in embedded], dtype=np.float32)
+
+            self._node_index = faiss.IndexFlatIP(dim)
+            self._node_index.add(embs)
+            self._node_id_map = {i: nid for i, (nid, _) in enumerate(embedded)}
+            self._node_id_reverse = {nid: i for i, (nid, _) in enumerate(embedded)}
 
     # ── Activation ────────────────────────────────────────────────
 
@@ -446,17 +461,42 @@ class CortexStore:
         if query_embedding.ndim == 1:
             query_embedding = query_embedding.reshape(1, -1)
 
-        k = min(top_k, self._node_index.ntotal)
-        scores, indices = self._node_index.search(query_embedding.astype(np.float32), k)
+        if self.compressor is not None:
+            # Compress query to binary via TurboQuant model
+            _, query_qjl = self.compressor.compress(query_embedding)
+            
+            # Binary distances are Hamming (smaller is better). 
+            # We fetch top_k * 5 candidates to perfectly rerank using precise float math
+            fetch_k = min(top_k * 5, self._node_index.ntotal)
+            scores, indices = self._node_index.search(query_qjl, fetch_k)
+            
+            candidates = []
+            for idx in indices[0]:
+                if idx == -1: continue
+                nid = self._node_id_map.get(int(idx))
+                if nid:
+                    node_emb = self.nodes[nid].get_embedding(self.compressor)
+                    if node_emb is not None:
+                        # Exact Cosine Similarity for Re-ranking back to absolute precision
+                        sim = float(np.dot(query_embedding[0], node_emb) / 
+                                   (np.linalg.norm(query_embedding[0]) * np.linalg.norm(node_emb) + 1e-8))
+                        candidates.append((nid, sim))
+            
+            # Sort descending by re-ranked float32 accuracy
+            candidates.sort(key=lambda x: x[1], reverse=True)
+            return candidates[:top_k]
+        else:
+            k = min(top_k, self._node_index.ntotal)
+            scores, indices = self._node_index.search(query_embedding.astype(np.float32), k)
 
-        results = []
-        for score, idx in zip(scores[0], indices[0]):
-            if idx == -1:
-                continue
-            nid = self._node_id_map.get(int(idx))
-            if nid:
-                results.append((nid, float(score)))
-        return results
+            results = []
+            for score, idx in zip(scores[0], indices[0]):
+                if idx == -1:
+                    continue
+                nid = self._node_id_map.get(int(idx))
+                if nid:
+                    results.append((nid, float(score)))
+            return results
 
     def reset_activations(self) -> None:
         """Reset all transient activations."""
