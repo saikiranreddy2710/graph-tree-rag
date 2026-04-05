@@ -27,8 +27,8 @@ class SourceReference:
 
 @dataclass
 class RetrievalTrace:
-    router_strategy: str
-    router_query_type: str
+    router_strategy: str = ""
+    router_query_type: str = ""
     sub_questions: list[str] = field(default_factory=list)
     hyde_used: bool = False
     hyde_document: str = ""
