@@ -185,11 +185,11 @@ class CortexRetriever:
         trace.synapses_strengthened = self.cortex.hebbian_update(activated_dict)
 
         # ── Post-Retrieval: Update Working Memory ─────────────────
-        emb_dict = {
-            nid: self.cortex.nodes[nid].embedding
-            for nid in activated_dict
-            if self.cortex.nodes[nid].embedding is not None
-        }
+        emb_dict = {}
+        for nid in activated_dict:
+            emb = self.cortex.nodes[nid].get_embedding(self.cortex.compressor)
+            if emb is not None:
+                emb_dict[nid] = emb
         self.cortex.working_memory.update(activated_dict, emb_dict)
         trace.working_memory_size = len(self.cortex.working_memory.active_nodes)
 
@@ -232,9 +232,11 @@ class CortexRetriever:
             col = self.cortex.columns[col_id]
             for member_id in col.member_ids:
                 node = self.cortex.nodes.get(member_id)
-                if node and node.embedding is not None:
-                    sim = float(np.dot(qe, node.embedding))
-                    if sim > self.activation_threshold:
-                        seeds[member_id] = max(seeds.get(member_id, 0), sim)
+                if node:
+                    node_emb = node.get_embedding(self.cortex.compressor)
+                    if node_emb is not None:
+                        sim = float(np.dot(qe, node_emb))
+                        if sim > self.activation_threshold:
+                            seeds[member_id] = max(seeds.get(member_id, 0), sim)
 
         return seeds

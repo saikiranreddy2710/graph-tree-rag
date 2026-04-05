@@ -50,9 +50,9 @@ class CortexNode:
     entity_names: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
     
-    # TurboQuant Compressed state
-    polar_q: Optional[np.ndarray] = None
-    qjl_signs: Optional[np.ndarray] = None
+    # TurboQuant Compressed state (norm + quantized coordinate indices)
+    compressed_norm: Optional[float] = None
+    compressed_indices: Optional[np.ndarray] = None
 
     # Brain-like properties
     activation: float = 0.0              # transient — current query activation
@@ -70,9 +70,13 @@ class CortexNode:
         """Get the float32 embedding, decompressing on-the-fly if needed to save RAM."""
         if self.embedding is not None:
             return self.embedding
-        if self.polar_q is not None and self.qjl_signs is not None and compressor is not None:
-            # Expand to 2D for compressor, extract 1D back
-            return compressor.decompress(self.polar_q.reshape(1, -1), self.qjl_signs.reshape(1, -1))[0]
+        if self.compressed_indices is not None and self.compressed_norm is not None and compressor is not None:
+            result = compressor.decompress(
+                np.array([self.compressed_norm], dtype=np.float32),
+                self.compressed_indices.reshape(1, -1),
+            )
+            # decompress returns (1, d) for single vector; squeeze to (d,)
+            return result[0] if result.ndim == 2 else result
         return None
 
     def to_dict(self) -> dict:
@@ -399,33 +403,22 @@ class CortexStore:
         self._column_id_map = {i: cid for i, (cid, _) in enumerate(cols_with_centroids)}
 
     def build_node_index(self) -> None:
-        """Build FAISS index over all node embeddings."""
-        if self.compressor is not None:
-            # Native C++ Binary FAISS indexing for extreme speed and memory savings
-            embedded = [(nid, n.qjl_signs) for nid, n in self.nodes.items() if n.qjl_signs is not None]
-            if not embedded:
-                return
+        """Build FAISS index over all node embeddings (decompressing if needed)."""
+        embedded = []
+        for nid, n in self.nodes.items():
+            emb = n.get_embedding(self.compressor)
+            if emb is not None:
+                embedded.append((nid, emb))
+        if not embedded:
+            return
 
-            dim_bits = self.compressor.qjl.proj_dim
-            self._node_index = faiss.IndexBinaryFlat(dim_bits)
-            
-            # Add packed uint8 representations directly to C++ memory
-            packed_embs = np.array([emb for _, emb in embedded], dtype=np.uint8)
-            self._node_index.add(packed_embs)
-            self._node_id_map = {i: nid for i, (nid, _) in enumerate(embedded)}
-            self._node_id_reverse = {nid: i for i, (nid, _) in enumerate(embedded)}
-        else:
-            embedded = [(nid, n.get_embedding(self.compressor)) for nid, n in self.nodes.items() if n.get_embedding(self.compressor) is not None]
-            if not embedded:
-                return
+        dim = embedded[0][1].shape[0]
+        embs = np.array([emb for _, emb in embedded], dtype=np.float32)
 
-            dim = embedded[0][1].shape[0]
-            embs = np.array([emb for _, emb in embedded], dtype=np.float32)
-
-            self._node_index = faiss.IndexFlatIP(dim)
-            self._node_index.add(embs)
-            self._node_id_map = {i: nid for i, (nid, _) in enumerate(embedded)}
-            self._node_id_reverse = {nid: i for i, (nid, _) in enumerate(embedded)}
+        self._node_index = faiss.IndexFlatIP(dim)
+        self._node_index.add(embs)
+        self._node_id_map = {i: nid for i, (nid, _) in enumerate(embedded)}
+        self._node_id_reverse = {nid: i for i, (nid, _) in enumerate(embedded)}
 
     # ── Activation ────────────────────────────────────────────────
 
@@ -454,49 +447,24 @@ class CortexStore:
     def find_nearest_nodes(
         self, query_embedding: np.ndarray, top_k: int = 15
     ) -> list[tuple[str, float]]:
-        """FAISS search for nearest nodes."""
+        """FAISS inner-product search for nearest nodes."""
         if self._node_index is None or self._node_index.ntotal == 0:
             return []
 
         if query_embedding.ndim == 1:
             query_embedding = query_embedding.reshape(1, -1)
 
-        if self.compressor is not None:
-            # Compress query to binary via TurboQuant model
-            _, query_qjl = self.compressor.compress(query_embedding)
-            
-            # Binary distances are Hamming (smaller is better). 
-            # We fetch top_k * 5 candidates to perfectly rerank using precise float math
-            fetch_k = min(top_k * 5, self._node_index.ntotal)
-            scores, indices = self._node_index.search(query_qjl, fetch_k)
-            
-            candidates = []
-            for idx in indices[0]:
-                if idx == -1: continue
-                nid = self._node_id_map.get(int(idx))
-                if nid:
-                    node_emb = self.nodes[nid].get_embedding(self.compressor)
-                    if node_emb is not None:
-                        # Exact Cosine Similarity for Re-ranking back to absolute precision
-                        sim = float(np.dot(query_embedding[0], node_emb) / 
-                                   (np.linalg.norm(query_embedding[0]) * np.linalg.norm(node_emb) + 1e-8))
-                        candidates.append((nid, sim))
-            
-            # Sort descending by re-ranked float32 accuracy
-            candidates.sort(key=lambda x: x[1], reverse=True)
-            return candidates[:top_k]
-        else:
-            k = min(top_k, self._node_index.ntotal)
-            scores, indices = self._node_index.search(query_embedding.astype(np.float32), k)
+        k = min(top_k, self._node_index.ntotal)
+        scores, indices = self._node_index.search(query_embedding.astype(np.float32), k)
 
-            results = []
-            for score, idx in zip(scores[0], indices[0]):
-                if idx == -1:
-                    continue
-                nid = self._node_id_map.get(int(idx))
-                if nid:
-                    results.append((nid, float(score)))
-            return results
+        results = []
+        for score, idx in zip(scores[0], indices[0]):
+            if idx == -1:
+                continue
+            nid = self._node_id_map.get(int(idx))
+            if nid:
+                results.append((nid, float(score)))
+        return results
 
     def reset_activations(self) -> None:
         """Reset all transient activations."""
@@ -615,9 +583,9 @@ class CortexStore:
             if k_emb is not None and r_emb is not None:
                 combined = (k_emb + r_emb) / 2.0
                 keep.embedding = combined / (np.linalg.norm(combined) + 1e-8)
-                # Clear quantized forms if any, since we merged them
-                keep.polar_q = None
-                keep.qjl_signs = None
+                # Clear compressed forms since we merged raw embeddings
+                keep.compressed_indices = None
+                keep.compressed_norm = None
             keep.node_type = "consolidated"
 
             # Redirect all edges from removed node to kept node
@@ -717,8 +685,8 @@ class CortexStore:
         for nid, n in self.nodes.items():
             if n.embedding is not None:
                 emb_data[nid] = n.embedding
-            elif n.polar_q is not None and n.qjl_signs is not None:
-                emb_data[nid] = {"pq": n.polar_q, "qjl": n.qjl_signs}
+            elif n.compressed_indices is not None and n.compressed_norm is not None:
+                emb_data[nid] = {"indices": n.compressed_indices, "norm": n.compressed_norm}
 
         with open(path / "embeddings.pkl", "wb") as f:
             pickle.dump(emb_data, f)
@@ -762,9 +730,9 @@ class CortexStore:
                 emb_data = pickle.load(f)
             for nid, emb in emb_data.items():
                 if nid in cs.nodes:
-                    if isinstance(emb, dict) and "pq" in emb and "qjl" in emb:
-                        cs.nodes[nid].polar_q = emb["pq"]
-                        cs.nodes[nid].qjl_signs = emb["qjl"]
+                    if isinstance(emb, dict) and "indices" in emb and "norm" in emb:
+                        cs.nodes[nid].compressed_indices = emb["indices"]
+                        cs.nodes[nid].compressed_norm = emb["norm"]
                     else:
                         cs.nodes[nid].embedding = emb
 
@@ -839,9 +807,9 @@ class CortexStoreBuilder:
         chunk_embs = self._embed(chunk_texts) if chunk_texts else np.array([])
         
         if len(chunk_embs) > 0 and cs.compressor is not None:
-            chunk_polar_qs, chunk_qjl_signs = cs.compressor.compress(chunk_embs)
+            chunk_norms, chunk_indices = cs.compressor.compress(chunk_embs)
         else:
-            chunk_polar_qs, chunk_qjl_signs = None, None
+            chunk_norms, chunk_indices = None, None
 
         for i, chunk in enumerate(chunks):
             chunk_entities = [
@@ -855,12 +823,11 @@ class CortexStoreBuilder:
                 metadata={"source": chunk.metadata.source, "section": chunk.metadata.section_header},
             )
             # Assign compressed vs float representations
-            if chunk_polar_qs is not None:
-                node.polar_q = chunk_polar_qs[i]
-                node.qjl_signs = chunk_qjl_signs[i]
+            if chunk_norms is not None:
+                node.compressed_norm = float(chunk_norms[i])
+                node.compressed_indices = chunk_indices[i]
             elif len(chunk_embs) > 0:
                 node.embedding = chunk_embs[i]
-                
             cs.add_node(node)
 
         # Step 2: Entity nodes
@@ -868,9 +835,9 @@ class CortexStoreBuilder:
         ent_embs = self._embed(ent_texts) if ent_texts else np.array([])
         
         if len(ent_embs) > 0 and cs.compressor is not None:
-            ent_polar_qs, ent_qjl_signs = cs.compressor.compress(ent_embs)
+            ent_norms, ent_indices = cs.compressor.compress(ent_embs)
         else:
-            ent_polar_qs, ent_qjl_signs = None, None
+            ent_norms, ent_indices = None, None
 
         for i, ent in enumerate(entities):
             node = CortexNode(
@@ -880,12 +847,12 @@ class CortexStoreBuilder:
                 entity_names=[ent.name],
                 metadata={"entity_type": ent.entity_type},
             )
-            if ent_polar_qs is not None:
-                node.polar_q = ent_polar_qs[i]
-                node.qjl_signs = ent_qjl_signs[i]
+            if ent_norms is not None:
+                node.compressed_norm = float(ent_norms[i])
+                node.compressed_indices = ent_indices[i]
             elif len(ent_embs) > 0:
                 node.embedding = ent_embs[i]
-                
+
             cs.add_node(node)
 
         # Step 3: Tree summary nodes

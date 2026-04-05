@@ -117,8 +117,8 @@ class Settings(BaseSettings):
 
     # ── CortexStore (Brain-Inspired Storage) ──────────────────────────
     cortex_enabled: bool = Field(default=True)
-    cortex_turboquant_enabled: bool = Field(default=True, description="Enable extreme compression for embeddings (PolarQuant+QJL)")
-    cortex_turboquant_bits: int = Field(default=3, description="Bit width for PolarQuant compression")
+    cortex_turboquant_enabled: bool = Field(default=True, description="Enable TurboQuant MSE-optimal compression for embeddings")
+    cortex_turboquant_bits: int = Field(default=4, description="Bit width for TurboQuant Lloyd-Max quantization (4-bit recommended)")
     cortex_persist_path: Path = Field(default=Path("data/cortex_store"))
     cortex_num_columns: int = Field(default=10, description="Number of cortical columns (GMM clusters)")
     cortex_hebbian_lr: float = Field(default=0.05, description="Hebbian learning rate for synapse updates")
